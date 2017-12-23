@@ -106,13 +106,14 @@ if __name__ == "__main__":
 		# get spread for each exchange, and compare it's ask to the bid of every other exchange
 		for exchange in exchanges:
 			#print(str(exchange.parsed_json)) # view raw data for QA
+			#want to maximize the spread between buying price (ask) and selling price (bid), i.e. buy low, sell high
 			print('\n------------------------'+exchange.name+'------------------------')
 			ask = exchange.getAsk()
 			bid = exchange.getBid()
-			print('Asking Price (USD for BTC): '+str(ask))
-			print('Bid Price (USD for BTC): '+str(bid))
-			spread = ask-bid
-			print('    Bid-to-Ask (Ask - Bid) Spread (USD for BTC): '+str(spread))
+			print('Asking (buy) Price (USD for BTC): '+str(ask))
+			print('Bid (sell) Price (USD for BTC): '+str(bid))
+			spread = bid-ask
+			print('    Bid-to-Ask (Bid - Ask) Spread (USD for BTC): '+str(spread))
 
 			if(spread >= SPREAD_THRESHOLD):
 				attractiveSpreads[exchange.name] = spread
@@ -124,8 +125,8 @@ if __name__ == "__main__":
 			for otherExchange in otherExchanges:
 				otherBid = otherExchange.getBid()
 				print('        '+otherExchange.name+' Bid Price (USD for BTC): '+str(otherBid))
-				comparativeSpread = ask-otherBid
-				print('            '+exchange.name+' Ask to '+otherExchange.name+' Bid Spread (USD for BTC): '+str(comparativeSpread))
+				comparativeSpread = otherBid-ask
+				print('            '+otherExchange.name+' Bid to '+exchange.name+' Ask Spread (USD for BTC): '+str(comparativeSpread))
 
 				if(comparativeSpread >= SPREAD_THRESHOLD):
 					attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
