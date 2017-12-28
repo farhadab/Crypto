@@ -72,6 +72,33 @@ class PoloniexExchange(Exchange):
 	def getBid(self):
 		return float(self.parsed_json['USDT_BTC']['highestBid'])
 
+class GeminiExchange(Exchange):
+	#https://api.gemini.com/v1/auction/btcusd
+	def __init__(self):
+		super(GeminiExchange, self).__init__("Gemini", "https://api.gemini.com/v1/auction/btcusd", None)
+		
+	def getAsk(self):
+		return float(self.parsed_json['last_lowest_ask_price'])
+		
+	def getBid(self):
+		return float(self.parsed_json['last_highest_bid_price'])
+
+class BinanceExchange(Exchange):
+	#https://support.binance.com/hc/en-us/articles/115000840592-Binance-API-Beta
+	def __init__(self):
+		super(BinanceExchange, self).__init__("Binance", "https://api.binance.com/api/v1/depth?symbol=BTCUSDT", None)
+		
+	def getAsk(self):
+		return float(self.parsed_json['asks'][0][0])
+		
+	def getBid(self):
+		return float(self.parsed_json['bids'][0][0])
+
+
+#coinSquare's out for now because their API is too annoying to work with. Specifically, their USD/BTC ask/bids are often empty
+	#https://classic.coinsquare.io/?method=img&tag=RESZFAQ
+	#https://coinsquare.io/api/v1/data/quotes
+
 #returns the JSON of the data at url
 def getJSON(url):
 	request = requests.get(url)
@@ -97,11 +124,15 @@ if __name__ == "__main__":
 		bittrex = BittrexExchange()
 		kraken = KrakenExchange()
 		poloniex = PoloniexExchange()
+		binance = BinanceExchange()
 
-		exchanges = [quadriga,bittrex,kraken,poloniex]
+		exchanges = [quadriga,bittrex,kraken,poloniex,binance]
 
 		# dictionary to store spreads that meet the desired threshold SPREAD_THRESHOLD
 		attractiveSpreads = {}
+		# initialize the lowest/highest
+		lowestAskExchange = exchanges[0]
+		highestBidExchange = exchanges[0]
 
 		# get spread for each exchange, and compare it's ask to the bid of every other exchange
 		for exchange in exchanges:
@@ -131,8 +162,18 @@ if __name__ == "__main__":
 				if(comparativeSpread >= SPREAD_THRESHOLD):
 					attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
 
+			# update lowest/highest
+			if(ask < lowestAskExchange.getAsk()):
+				lowestAskExchange = exchange
+			if(bid > highestBidExchange.getBid()):
+				highestBidExchange = exchange
+
+		# print our results
 		print('\nThe following spreads have been deemed attractive:')
 		for attractiveSpread in attractiveSpreads:
 			print('    Exchange(s): '+attractiveSpread+' Spread: '+str(attractiveSpreads[attractiveSpread]))
+		print('\nThe lowest ask (best place to buy) is '+str(lowestAskExchange.getAsk())+' ('+lowestAskExchange.name+')')
+		print('\nThe highest bid (best place to sell) is '+str(highestBidExchange.getBid())+' ('+highestBidExchange.name+')')
+
 		# repeat
 		time.sleep(10)
