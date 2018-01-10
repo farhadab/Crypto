@@ -72,17 +72,6 @@ class PoloniexExchange(Exchange):
 	def getBid(self):
 		return float(self.parsed_json['USDT_BTC']['highestBid'])
 
-class GeminiExchange(Exchange):
-	#https://api.gemini.com/v1/auction/btcusd
-	def __init__(self):
-		super(GeminiExchange, self).__init__("Gemini", "https://api.gemini.com/v1/auction/btcusd", None)
-		
-	def getAsk(self):
-		return float(self.parsed_json['last_lowest_ask_price'])
-		
-	def getBid(self):
-		return float(self.parsed_json['last_highest_bid_price'])
-
 class BinanceExchange(Exchange):
 	#https://support.binance.com/hc/en-us/articles/115000840592-Binance-API-Beta
 	def __init__(self):
@@ -94,6 +83,17 @@ class BinanceExchange(Exchange):
 	def getBid(self):
 		return float(self.parsed_json['bids'][0][0])
 
+class GeminiExchange(Exchange):
+	#https://docs.gemini.com/rest-api/
+	def __init__(self):
+		super(GeminiExchange, self).__init__("Gemini", "https://api.gemini.com/v1/book/btcusd", None)
+		
+	def getAsk(self):
+		return float(self.parsed_json['asks'][0]['price'])
+		
+	def getBid(self):
+		return float(self.parsed_json['bids'][0]['price'])
+
 
 #coinSquare's out for now because their API is too annoying to work with. Specifically, their USD/BTC ask/bids are often empty
 	#https://classic.coinsquare.io/?method=img&tag=RESZFAQ
@@ -101,10 +101,16 @@ class BinanceExchange(Exchange):
 
 #returns the JSON of the data at url
 def getJSON(url):
-	request = requests.get(url)
-	json_string = request.text
-	#print(json_string)
-	return json.loads(json_string)
+	json_string = ''
+	pased_json = None
+	try:
+		request = requests.get(url)
+		json_string = request.text
+		#print(json_string)
+		pased_json = json.loads(json_string)
+	except:
+		print('Did not receive a response from '+url)
+	return pased_json
 
 #add seconds to a time
 def addSecs(tm, secs):
@@ -125,8 +131,9 @@ if __name__ == "__main__":
 		kraken = KrakenExchange()
 		poloniex = PoloniexExchange()
 		binance = BinanceExchange()
+		gemini = GeminiExchange()
 
-		exchanges = [quadriga,bittrex,kraken,poloniex,binance]
+		exchanges = [quadriga,bittrex,kraken,poloniex,binance,gemini]
 
 		# dictionary to store spreads that meet the desired threshold SPREAD_THRESHOLD
 		attractiveSpreads = {}
@@ -136,37 +143,43 @@ if __name__ == "__main__":
 
 		# get spread for each exchange, and compare it's ask to the bid of every other exchange
 		for exchange in exchanges:
-			#print(str(exchange.parsed_json)) # view raw data for QA
-			#want to maximize the spread between buying price (ask) and selling price (bid), i.e. buy low, sell high
-			print('\n------------------------'+exchange.name+'------------------------')
-			ask = exchange.getAsk()
-			bid = exchange.getBid()
-			print('Asking (buy) Price (USD for BTC): '+str(ask))
-			print('Bid (sell) Price (USD for BTC): '+str(bid))
-			spread = bid-ask
-			print('    Bid-to-Ask (Bid - Ask) Spread (USD for BTC): '+str(spread))
+			try:
+				#print(str(exchange.parsed_json)) # view raw data for QA
+				#want to maximize the spread between buying price (ask) and selling price (bid), i.e. buy low, sell high
+				print('\n------------------------'+exchange.name+'------------------------')
+				ask = exchange.getAsk()
+				bid = exchange.getBid()
+				print('Asking (buy) Price (USD for BTC): '+str(ask))
+				print('Bid (sell) Price (USD for BTC): '+str(bid))
+				spread = bid-ask
+				print('\tBid-to-Ask (Bid - Ask) Spread (USD for BTC): '+str(spread))
 
-			if(spread >= SPREAD_THRESHOLD):
-				attractiveSpreads[exchange.name] = spread
+				if(spread >= SPREAD_THRESHOLD):
+					attractiveSpreads[exchange.name] = spread
 
-			otherExchanges = list(exchanges)
-			otherExchanges.remove(exchange)
+				otherExchanges = list(exchanges)
+				otherExchanges.remove(exchange)
 
-			print('\n    Compared to other exchanges:')
-			for otherExchange in otherExchanges:
-				otherBid = otherExchange.getBid()
-				print('        '+otherExchange.name+' Bid Price (USD for BTC): '+str(otherBid))
-				comparativeSpread = otherBid-ask
-				print('            '+otherExchange.name+' Bid to '+exchange.name+' Ask Spread (USD for BTC): '+str(comparativeSpread))
+				print('\n\tCompared to other exchanges:')
+				for otherExchange in otherExchanges:
+					try:
+						otherBid = otherExchange.getBid()
+						print('\t\t'+otherExchange.name+' Bid Price (USD for BTC): '+str(otherBid))
+						comparativeSpread = otherBid-ask
+						print('\t\t\t'+otherExchange.name+' Bid to '+exchange.name+' Ask Spread (USD for BTC): '+str(comparativeSpread))
 
-				if(comparativeSpread >= SPREAD_THRESHOLD):
-					attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
+						if(comparativeSpread >= SPREAD_THRESHOLD):
+							attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
+					except:
+						print('\t\tCould not retrieve data for '+otherExchange.name)
 
-			# update lowest/highest
-			if(ask < lowestAskExchange.getAsk()):
-				lowestAskExchange = exchange
-			if(bid > highestBidExchange.getBid()):
-				highestBidExchange = exchange
+				# update lowest/highest
+				if(ask < lowestAskExchange.getAsk()):
+					lowestAskExchange = exchange
+				if(bid > highestBidExchange.getBid()):
+					highestBidExchange = exchange
+			except:
+				print('Could not retrieve data for '+exchange.name)
 
 		# print our results
 		print('\nThe following spreads have been deemed attractive:')
