@@ -2,6 +2,7 @@ import requests
 import json
 import time
 import datetime
+import sendemail as se
 
 # the target threshold for determining whether or not a spread is attractive
 SPREAD_THRESHOLD = 1000.0
@@ -112,81 +113,116 @@ def getJSON(url):
 		print('Did not receive a response from '+url)
 	return pased_json
 
+
 #add seconds to a time
 def addSecs(tm, secs):
     fulldate = datetime.datetime(100, 1, 1, tm.hour, tm.minute, tm.second)
     fulldate = fulldate + datetime.timedelta(seconds=secs)
     return fulldate.time()
 
+
+# send email alert if ask of exchange is less than or equal to threshold
+def ask_alert(exchange, threshold, send_email=False):
+		exchange_ask = exchange.getAsk()
+		message = exchange.name+' ask is '+str(exchange_ask)
+		print('\n'+message)
+
+		if exchange_ask <= threshold or send_email:
+			print('Sending email')
+			se.send_email(message, message)
+
+
+# compare our exchanges and print results
+def compare_exchanges():
+	print('\nCurrent Time: '+str(datetime.datetime.now())+'------------------------------------------')
+	# initialize exchanges and put into a list
+	quadriga = QuadrigaExchange()
+	bittrex = BittrexExchange()
+	kraken = KrakenExchange()
+	poloniex = PoloniexExchange()
+	binance = BinanceExchange()
+	gemini = GeminiExchange()
+
+	exchanges = [quadriga,bittrex,kraken,poloniex,binance,gemini]
+
+	# dictionary to store spreads that meet the desired threshold SPREAD_THRESHOLD
+	attractiveSpreads = {}
+	# initialize the lowest/highest
+	lowestAskExchange = exchanges[0]
+	highestBidExchange = exchanges[0]
+
+	# get spread for each exchange, and compare it's ask to the bid of every other exchange
+	for exchange in exchanges:
+		try:
+			#print(str(exchange.parsed_json)) # view raw data for QA
+			#want to maximize the spread between buying price (ask) and selling price (bid), i.e. buy low, sell high
+			print('\n------------------------'+exchange.name+'------------------------')
+			ask = exchange.getAsk()
+			bid = exchange.getBid()
+			print('Asking (buy) Price (USD for BTC): '+str(ask))
+			print('Bid (sell) Price (USD for BTC): '+str(bid))
+			spread = bid-ask
+			print('\tBid-to-Ask (Bid - Ask) Spread (USD for BTC): '+str(spread))
+
+			if(spread >= SPREAD_THRESHOLD):
+				attractiveSpreads[exchange.name] = spread
+
+			otherExchanges = list(exchanges)
+			otherExchanges.remove(exchange)
+
+			print('\n\tCompared to other exchanges:')
+			for otherExchange in otherExchanges:
+				try:
+					otherBid = otherExchange.getBid()
+					print('\t\t'+otherExchange.name+' Bid Price (USD for BTC): '+str(otherBid))
+					comparativeSpread = otherBid-ask
+					print('\t\t\t'+otherExchange.name+' Bid to '+exchange.name+' Ask Spread (USD for BTC): '+str(comparativeSpread))
+
+					if(comparativeSpread >= SPREAD_THRESHOLD):
+						attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
+				except:
+					print('\t\tCould not retrieve data for '+otherExchange.name)
+
+			# update lowest/highest
+			if(ask < lowestAskExchange.getAsk()):
+				lowestAskExchange = exchange
+			if(bid > highestBidExchange.getBid()):
+				highestBidExchange = exchange
+		except:
+			print('Could not retrieve data for '+exchange.name)
+
+	# print our results
+	print('\nThe following spreads have been deemed attractive:')
+	for attractiveSpread in attractiveSpreads:
+		print('    Exchange(s): '+attractiveSpread+' Spread: '+str(attractiveSpreads[attractiveSpread]))
+	print('\nThe lowest ask (best place to buy) is '+str(lowestAskExchange.getAsk())+' ('+lowestAskExchange.name+')')
+	print('\nThe highest bid (best place to sell) is '+str(highestBidExchange.getBid())+' ('+highestBidExchange.name+')')
+
+
+
 if __name__ == "__main__":
 	## use the following code if we want to stop running after a certain point. Electricity/hydro concerns?
 	#start = datetime.datetime.now().time()
 	#end = addSecs(start, 10)
 	#while datetime.datetime.now().time() < end:
+	target_price = 7000
+	interval = 600 #seonds
+
+	seconds = 0
 	while True:
-		print('\nCurrent Time: '+str(datetime.datetime.now())+'------------------------------------------')
-		# initialize exchanges and put into a list
-		quadriga = QuadrigaExchange()
-		bittrex = BittrexExchange()
-		kraken = KrakenExchange()
-		poloniex = PoloniexExchange()
-		binance = BinanceExchange()
-		gemini = GeminiExchange()
+		# compare exchanges
+		#compare_exchanges()
 
-		exchanges = [quadriga,bittrex,kraken,poloniex,binance,gemini]
+		# set alert for quadriga
+		ask_alert(QuadrigaExchange(), target_price)
 
-		# dictionary to store spreads that meet the desired threshold SPREAD_THRESHOLD
-		attractiveSpreads = {}
-		# initialize the lowest/highest
-		lowestAskExchange = exchanges[0]
-		highestBidExchange = exchanges[0]
+		# send alert every 3 hours
+		if seconds == 10800:
+			ask_alert(QuadrigaExchange(), target_price, True)
+			seconds = 0
+		else:
+			seconds += interval
 
-		# get spread for each exchange, and compare it's ask to the bid of every other exchange
-		for exchange in exchanges:
-			try:
-				#print(str(exchange.parsed_json)) # view raw data for QA
-				#want to maximize the spread between buying price (ask) and selling price (bid), i.e. buy low, sell high
-				print('\n------------------------'+exchange.name+'------------------------')
-				ask = exchange.getAsk()
-				bid = exchange.getBid()
-				print('Asking (buy) Price (USD for BTC): '+str(ask))
-				print('Bid (sell) Price (USD for BTC): '+str(bid))
-				spread = bid-ask
-				print('\tBid-to-Ask (Bid - Ask) Spread (USD for BTC): '+str(spread))
-
-				if(spread >= SPREAD_THRESHOLD):
-					attractiveSpreads[exchange.name] = spread
-
-				otherExchanges = list(exchanges)
-				otherExchanges.remove(exchange)
-
-				print('\n\tCompared to other exchanges:')
-				for otherExchange in otherExchanges:
-					try:
-						otherBid = otherExchange.getBid()
-						print('\t\t'+otherExchange.name+' Bid Price (USD for BTC): '+str(otherBid))
-						comparativeSpread = otherBid-ask
-						print('\t\t\t'+otherExchange.name+' Bid to '+exchange.name+' Ask Spread (USD for BTC): '+str(comparativeSpread))
-
-						if(comparativeSpread >= SPREAD_THRESHOLD):
-							attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
-					except:
-						print('\t\tCould not retrieve data for '+otherExchange.name)
-
-				# update lowest/highest
-				if(ask < lowestAskExchange.getAsk()):
-					lowestAskExchange = exchange
-				if(bid > highestBidExchange.getBid()):
-					highestBidExchange = exchange
-			except:
-				print('Could not retrieve data for '+exchange.name)
-
-		# print our results
-		print('\nThe following spreads have been deemed attractive:')
-		for attractiveSpread in attractiveSpreads:
-			print('    Exchange(s): '+attractiveSpread+' Spread: '+str(attractiveSpreads[attractiveSpread]))
-		print('\nThe lowest ask (best place to buy) is '+str(lowestAskExchange.getAsk())+' ('+lowestAskExchange.name+')')
-		print('\nThe highest bid (best place to sell) is '+str(highestBidExchange.getBid())+' ('+highestBidExchange.name+')')
-
+		print(seconds)
 		# repeat
-		time.sleep(10)
+		time.sleep(interval)
