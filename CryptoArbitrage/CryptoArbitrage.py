@@ -3,9 +3,21 @@ import json
 import time
 import datetime
 import sendemail as se
+from config import (
+					SPREAD_THRESHOLD,
+					TARGET_PRICE_BITCOIN,
+					TARGET_PRICE_EMAIL_INTERVAL,
+					EMAIL_INTERVAL_DEFAULT
+					)
 
-# the target threshold for determining whether or not a spread is attractive
-SPREAD_THRESHOLD = 1000.0
+SUPPORTED_EXCHANGES = [
+	'Quadriga',
+	'Bittrex',
+	'Kraken',
+	'Poloniex',
+	'Binance',
+	'Gemini'
+]
 
 class Exchange:
 	def __init__(self, name, quoteURL, quoteBook):
@@ -122,28 +134,42 @@ def addSecs(tm, secs):
 
 
 # send email alert if ask of exchange is less than or equal to threshold
-def ask_alert(exchange, threshold, send_email=False):
-		exchange_ask = exchange.getAsk()
-		message = exchange.name+' ask is '+str(exchange_ask)
-		print('\n'+message)
+def ask_alert(exchange_name, threshold, send_email=False):
+	exchange = get_exchange_from_name(exchange_name)
+	exchange_ask = exchange.getAsk()
+	message = exchange.name+' ask is '+str(exchange_ask)
+	print('\n'+message)
 
-		if exchange_ask <= threshold or send_email:
-			print('Sending email')
-			se.send_email(message, message)
+	if exchange_ask <= threshold or send_email:
+		print('Sending email')
+		se.send_email(message, message)
+
+
+# return exchange object from name
+def get_exchange_from_name(exchange_name):
+	exchange = None
+	# todo: make this dynamic...
+	if exchange_name == 'Quadriga':
+		exchange = QuadrigaExchange()
+	elif exchange_name == 'Bittrex':
+		exchange = BittrexExchange()
+	elif exchange_name == 'Kraken':
+		exchange = KrakenExchange()
+	elif exchange_name == 'Poloniex':
+		exchange = PoloniexExchange()
+	elif exchange_name == 'Binance':
+		exchange = BinanceExchange()
+	elif exchange_name == 'Gemini':
+		exchange = GeminiExchange()
+	return exchange
 
 
 # compare our exchanges and print results
 def compare_exchanges():
 	print('\nCurrent Time: '+str(datetime.datetime.now())+'------------------------------------------')
+	print('\nComparing exchange prices...')
 	# initialize exchanges and put into a list
-	quadriga = QuadrigaExchange()
-	bittrex = BittrexExchange()
-	kraken = KrakenExchange()
-	poloniex = PoloniexExchange()
-	binance = BinanceExchange()
-	gemini = GeminiExchange()
-
-	exchanges = [quadriga,bittrex,kraken,poloniex,binance,gemini]
+	exchanges = [get_exchange_from_name(exchange_name) for exchange_name in SUPPORTED_EXCHANGES]
 
 	# dictionary to store spreads that meet the desired threshold SPREAD_THRESHOLD
 	attractiveSpreads = {}
@@ -179,7 +205,7 @@ def compare_exchanges():
 					print('\t\t\t'+otherExchange.name+' Bid to '+exchange.name+' Ask Spread (USD for BTC): '+str(comparativeSpread))
 
 					if(comparativeSpread >= SPREAD_THRESHOLD):
-						attractiveSpreads[exchange.name+'-'+otherExchange.name] = comparativeSpread
+						attractiveSpreads[exchange.name+' (buy) '+'- '+otherExchange.name+' (sell)'] = comparativeSpread
 				except:
 					print('\t\tCould not retrieve data for '+otherExchange.name)
 
@@ -192,37 +218,41 @@ def compare_exchanges():
 			print('Could not retrieve data for '+exchange.name)
 
 	# print our results
-	print('\nThe following spreads have been deemed attractive:')
-	for attractiveSpread in attractiveSpreads:
-		print('    Exchange(s): '+attractiveSpread+' Spread: '+str(attractiveSpreads[attractiveSpread]))
+	if len(attractiveSpreads) == 0:
+		print('\nNo spreads found to be attractive at threshold of '+str(SPREAD_THRESHOLD))
+	else:
+		print('\nThe following attractive spreads have been found given threshold of :'+str(SPREAD_THRESHOLD))
+		for attractiveSpread in attractiveSpreads:
+			print('    Exchange(s): '+attractiveSpread+' Spread: '+str(attractiveSpreads[attractiveSpread]))
+
+	# regardless of threshold results, show best available
 	print('\nThe lowest ask (best place to buy) is '+str(lowestAskExchange.getAsk())+' ('+lowestAskExchange.name+')')
-	print('\nThe highest bid (best place to sell) is '+str(highestBidExchange.getBid())+' ('+highestBidExchange.name+')')
+	print('The highest bid (best place to sell) is '+str(highestBidExchange.getBid())+' ('+highestBidExchange.name+')')
 
 
-
-if __name__ == "__main__":
-	## use the following code if we want to stop running after a certain point. Electricity/hydro concerns?
-	#start = datetime.datetime.now().time()
-	#end = addSecs(start, 10)
-	#while datetime.datetime.now().time() < end:
-	target_price = 7000
-	interval = 600 #seonds
-
+# set up an ask alert for Bitcoin on Quadriga
+def bitcoin_quadriga_ask_alert(target_price, interval, interval_default):
+	print('\nCurrent Time: '+str(datetime.datetime.now())+'------------------------------------------')
+	print('\nCreating alert for Bitcoin on Quadriga...')
 	seconds = 0
 	while True:
-		# compare exchanges
-		#compare_exchanges()
-
 		# set alert for quadriga
-		ask_alert(QuadrigaExchange(), target_price)
+		ask_alert('Quadriga', target_price)
 
-		# send alert every 3 hours
-		if seconds == 10800:
-			ask_alert(QuadrigaExchange(), target_price, True)
+		# send alert periodically
+		if seconds == interval_default:
+			ask_alert('Quadriga', target_price, True)
 			seconds = 0
 		else:
 			seconds += interval
 
-		print(seconds)
+		print('Sleeping for '+str(seconds)+' seconds...')
 		# repeat
 		time.sleep(interval)
+
+
+if __name__ == "__main__":
+	compare_exchanges()
+	bitcoin_quadriga_ask_alert(TARGET_PRICE_BITCOIN, 
+								TARGET_PRICE_EMAIL_INTERVAL, 
+								EMAIL_INTERVAL_DEFAULT)

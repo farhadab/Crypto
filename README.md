@@ -1,2 +1,2 @@
 # Crypto
-Projects related to crypto-currencies
+Small projects related to crypto-currencies
